@@ -20,6 +20,24 @@ iex ((New-Object Net.WebClient).DownloadString('https://get.inkentry.com/install
 Visiting `https://get.inkentry.com` in a browser redirects to the
 [getting-started docs](https://inkentry.com/docs/getting-started).
 
+## Migrating from spelunk
+
+If you already have spelunk installed, run the migration instead of the
+installer. It installs inkentry, carries your memory across, verifies it, and
+only then retires spelunk:
+
+```sh
+curl -fsSL https://get.inkentry.com/migrate.sh | sh
+```
+
+To see what it would do without changing anything:
+
+```sh
+curl -fsSL https://get.inkentry.com/migrate.sh | INKENTRY_MIGRATE_DRY_RUN=1 sh
+```
+
+Your existing `.spelunk` directories are never modified or deleted.
+
 ## Why this repository looks the way it does
 
 - **`install.sh` / `install.ps1`** download the latest release for the current
@@ -27,6 +45,14 @@ Visiting `https://get.inkentry.com` in a browser redirects to the
   telemetry, no account, and `install.sh` never invokes sudo on its own. Both
   accept a version and an install-directory override — see the header of each
   script.
+- **`migrate.sh`** moves a spelunk installation to inkentry. It calls
+  `install.sh` rather than duplicating it, so there is one installer and the
+  migration is a separate concern. Memory entries are authored and nothing
+  regenerates them, so the script never modifies or deletes an existing store,
+  and it refuses to remove spelunk unless every discovered store migrated and
+  verified. Stores are found by scanning the filesystem, not by reading the
+  project registry: the registry records projects that were *indexed*, which
+  omits any repository whose memory was only ever added.
 - **`index.html`** is the root redirect. GitHub Pages cannot issue server-side
   redirects, so the root carries a meta refresh to the docs. Only browsers
   ever see it; scripts are fetched by their full path.
