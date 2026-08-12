@@ -27,12 +27,29 @@ $target = 'x86_64-pc-windows-msvc'
 if ($env:INKENTRY_VERSION) {
   $tag = $env:INKENTRY_VERSION
 } else {
-  $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest"
+  # /releases/latest excludes pre-releases and 404s when every release is one,
+  # which is the state during a release-candidate cycle. Falling back to the
+  # newest release of any kind is what makes an -rc installable; once a stable
+  # release exists it wins and the fallback never runs.
+  try {
+    $release = Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest"
+  } catch {
+    $release = $null
+  }
+  if (-not $release) {
+    $release = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases?per_page=1")[0]
+    if ($release) {
+      Write-Host "no stable release yet - installing the pre-release $($release.tag_name)"
+    }
+  }
+  if (-not $release) {
+    throw "install.ps1: could not determine a release from the GitHub API"
+  }
   $tag = $release.tag_name
 }
-$version = $tag -replace '^v', ''
 
-$archive = "inkentry-$version-$target.zip"
+# Named from the git tag, `v` included — see the note in install.sh.
+$archive = "inkentry-$tag-$target.zip"
 $url = "https://github.com/$repo/releases/download/$tag/$archive"
 
 if ($env:INKENTRY_INSTALL_DIR) {

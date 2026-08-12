@@ -13,8 +13,9 @@
 #   INKENTRY_INSTALL_DIR  install directory (default: /usr/local/bin when
 #                         writable, otherwise ~/.local/bin)
 #
-# Release assets are expected as inkentry-<version>-<target>.tar.gz, matching
-# the release workflow. If that naming ever changes, change it here too.
+# Release assets are named from the git tag, not the bare version: the release
+# workflow builds them as inkentry-${{ github.ref_name }}-<target>, so the `v`
+# is part of the filename. If that naming ever changes, change it here too.
 
 set -eu
 
@@ -57,11 +58,20 @@ main() {
   else
     tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
       sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
-    [ -n "$tag" ] || fail "could not determine the latest release from the GitHub API"
-  fi
-  version=${tag#v}
 
-  archive="inkentry-${version}-${target}.tar.gz"
+    # `/releases/latest` excludes pre-releases and 404s when every release is
+    # one, which is the state during a release-candidate cycle. Falling back to
+    # the newest release of any kind is what makes an -rc installable; once a
+    # stable release exists it wins and this never runs.
+    if [ -z "$tag" ]; then
+      tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=1" |
+        sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+      [ -z "$tag" ] || say "no stable release yet — installing the pre-release $tag"
+    fi
+
+    [ -n "$tag" ] || fail "could not determine a release from the GitHub API"
+  fi
+  archive="inkentry-${tag}-${target}.tar.gz"
   url="https://github.com/$REPO/releases/download/$tag/$archive"
 
   if [ -n "${INKENTRY_INSTALL_DIR:-}" ]; then
