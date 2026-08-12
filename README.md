@@ -80,7 +80,7 @@ This repository is local-only until the window. To publish:
 3. DNS: `CNAME get.inkentry.com → <owner>.github.io`.
 4. Once the certificate is issued, tick **Enforce HTTPS**.
 5. Confirm a release exists whose assets are named
-   `inkentry-<version>-<target>.tar.gz` / `.zip` — the scripts are written
+   `inkentry-<tag>-<target>.tar.gz` / `.zip`, tag including its `v` — the scripts are written
    against that naming and must not go live before it exists.
 6. Smoke-test both one-liners from a clean machine.
 
