@@ -17,6 +17,22 @@ Windows (PowerShell):
 iex ((New-Object Net.WebClient).DownloadString('https://get.inkentry.com/install.ps1'))
 ```
 
+To see what either installer would do without writing anything:
+
+```sh
+curl -fsSL https://get.inkentry.com/install.sh | sh -s -- --dry-run
+```
+
+```powershell
+$env:INKENTRY_DRY_RUN=1; iex ((New-Object Net.WebClient).DownloadString('https://get.inkentry.com/install.ps1'))
+```
+
+The Windows preview is an environment variable rather than a switch because a
+piped invocation cannot carry a parameter. `install.ps1` does accept `-DryRun`
+when it is run as a script block, and `install.sh` accepts `--dry-run` either
+way. Both report the release, the archive URL, the install directory, whether
+the PATH would change, and whether the archive is actually reachable.
+
 Visiting `https://get.inkentry.com` in a browser redirects to the
 [getting-started docs](https://inkentry.com/docs/getting-started).
 

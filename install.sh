@@ -8,10 +8,16 @@
 # `inkentry` and `inkentry-server` binaries. No telemetry, no account, and the
 # script never invokes sudo on its own.
 #
+# Options:
+#   --dry-run             print what would happen and write nothing
+#
+#   curl -fsSL https://get.inkentry.com/install.sh | sh -s -- --dry-run
+#
 # Overrides:
 #   INKENTRY_VERSION      install a specific tag (default: latest release)
 #   INKENTRY_INSTALL_DIR  install directory (default: /usr/local/bin when
 #                         writable, otherwise ~/.local/bin)
+#   INKENTRY_DRY_RUN      set to any value for --dry-run, matching migrate.sh
 #
 # Release assets are named from the git tag, not the bare version: the release
 # workflow builds them as inkentry-${{ github.ref_name }}-<target>, so the `v`
@@ -28,6 +34,28 @@ fail() {
 }
 
 main() {
+  dry_run=${INKENTRY_DRY_RUN:+1}
+  dry_run=${dry_run:-0}
+
+  # An unrecognised option is an error, never a silent no-op. A preview flag
+  # that is quietly ignored installs when it promised not to, which is worse
+  # than not offering one.
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dry-run) dry_run=1 ;;
+      -h | --help)
+        say "usage: install.sh [--dry-run]"
+        say ""
+        say "  --dry-run   print what would happen and write nothing"
+        say ""
+        say "environment: INKENTRY_VERSION, INKENTRY_INSTALL_DIR, INKENTRY_DRY_RUN"
+        return 0
+        ;;
+      *) fail "unknown option: $1 (supported: --dry-run, --help)" ;;
+    esac
+    shift
+  done
+
   os=$(uname -s)
   arch=$(uname -m)
 
@@ -56,7 +84,11 @@ main() {
   if [ -n "${INKENTRY_VERSION:-}" ]; then
     tag="$INKENTRY_VERSION"
   else
-    tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
+    # stderr is discarded because a 404 here is the expected state during a
+    # release-candidate cycle, handled by the fallback below. Left visible it
+    # prints `curl: (56) ... 404` above a successful install, which reads as a
+    # failure the user is supposed to act on.
+    tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
       sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 
     # `/releases/latest` excludes pre-releases and 404s when every release is
@@ -81,6 +113,30 @@ main() {
   else
     install_dir="$HOME/.local/bin"
   fi
+
+  # Everything above this point only reads. Everything below it writes.
+  if [ "$dry_run" -eq 1 ]; then
+    say "dry run: nothing is downloaded, written or changed."
+    say ""
+    say "  platform     $os $arch ($target)"
+    say "  release      $tag"
+    say "  archive      $url"
+    say "  install to   $install_dir/inkentry"
+    say "               $install_dir/inkentry-server"
+    [ -d "$install_dir" ] || say "  create       $install_dir"
+    case ":$PATH:" in
+      *":$install_dir:"*) ;;
+      *) say "  PATH         $install_dir is not on it; a real run says so and changes nothing" ;;
+    esac
+    say ""
+    if curl -fsSI --proto '=https' "$url" >/dev/null 2>&1; then
+      say "the release archive is reachable, so a real run would find it."
+    else
+      say "warning: the release archive is NOT reachable at that URL, so a real run would fail."
+    fi
+    return 0
+  fi
+
   mkdir -p "$install_dir"
 
   tmp=$(mktemp -d)
