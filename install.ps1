@@ -13,8 +13,26 @@
 # Overrides:
 #   $env:INKENTRY_VERSION      install a specific tag (default: latest)
 #   $env:INKENTRY_INSTALL_DIR  install directory
+#   $env:INKENTRY_DRY_RUN      set to any value to preview without writing
+#
+# To preview, prefer the environment variable, because the piped invocation
+# above cannot carry a parameter:
+#
+#   $env:INKENTRY_DRY_RUN=1; iex ((New-Object Net.WebClient).DownloadString('https://get.inkentry.com/install.ps1'))
+
+[CmdletBinding()]
+param(
+  # CmdletBinding is what makes an unrecognised argument an error. Without it a
+  # script or scriptblock quietly collects unbound arguments into $args, so a
+  # mistyped or invented flag vanishes and the install runs anyway. That is how
+  # a documented -DryRun that this script did not implement was able to perform
+  # a full install, PATH change included.
+  [switch]$DryRun
+)
 
 $ErrorActionPreference = 'Stop'
+
+if ($env:INKENTRY_DRY_RUN) { $DryRun = $true }
 
 $repo = 'inkentries/inkentry'
 
@@ -57,6 +75,43 @@ if ($env:INKENTRY_INSTALL_DIR) {
 } else {
   $installDir = Join-Path $env:LOCALAPPDATA 'Programs\inkentry'
 }
+
+# Everything above this point only reads. Everything below it writes, so the
+# preview returns here. `return` and not `exit`: this script is normally run by
+# `iex`, which evaluates it in the caller's own scope, and `exit` there would
+# close the user's shell rather than end the preview.
+if ($DryRun) {
+  # Read defensively: the User target is a Windows registry concept, and this
+  # preview must never be the thing that fails. A real run reads it again.
+  $currentUserPath = ''
+  try { $currentUserPath = [Environment]::GetEnvironmentVariable('Path', 'User') } catch { }
+  $pathAlready = ($currentUserPath -split ';') -contains $installDir
+
+  Write-Host 'dry run: nothing is downloaded, written or changed.'
+  Write-Host ''
+  Write-Host "  release      $tag"
+  Write-Host "  archive      $url"
+  Write-Host "  install to   $installDir\inkentry.exe"
+  Write-Host "               $installDir\inkentry-server.exe"
+  if (-not (Test-Path $installDir)) {
+    Write-Host "  create       $installDir"
+  }
+  if ($pathAlready) {
+    Write-Host '  user PATH    already contains that directory, so it would be left alone'
+  } else {
+    Write-Host "  user PATH    would gain $installDir (a persistent change, under HKCU\Environment)"
+  }
+  Write-Host ''
+
+  try {
+    Invoke-WebRequest -Uri $url -Method Head -UseBasicParsing | Out-Null
+    Write-Host 'the release archive is reachable, so a real run would find it.'
+  } catch {
+    Write-Host "warning: the release archive is NOT reachable at that URL, so a real run would fail: $($_.Exception.Message)"
+  }
+  return
+}
+
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
